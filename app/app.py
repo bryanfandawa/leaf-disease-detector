@@ -4,6 +4,13 @@ import torch.nn as nn
 from torchvision import models, transforms
 import gradio as gr
 
+try:
+    import spaces
+    gpu = spaces.GPU
+except ImportError:
+    gpu = lambda f: f
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
 CLASSES = [
     "Pepper__bell___Bacterial_spot", "Pepper__bell___healthy",
     "Potato___Early_blight", "Potato___Late_blight", "Potato___healthy",
@@ -36,6 +43,7 @@ model = models.resnet18(weights = None)
 model.fc = nn.Linear(model.fc.in_features, len(CLASSES))
 model_path = Path(__file__).parent / "resnet_finetuned.pth"
 model. load_state_dict(torch.load(model_path, map_location = "cpu"))
+model = model.to(device)
 model.eval()
 
 transform = transforms.Compose([
@@ -44,10 +52,11 @@ transform = transforms.Compose([
     transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
 ])
 
+@gpu
 def predict(image):
-    x = transform(image.convert("RGB")).unsqueeze(0)
+    x = transform(image.convert("RGB")).unsqueeze(0).to(device)
     with torch.no_grad():
-        probs = torch.softmax(model(x), dim = 1)[0]
+        probs = torch.softmax(model(x), dim = 1)[0].cpu()
 
     results = {PRETTY[c]: float(p) for c, p in zip(CLASSES, probs)}
     top_class = CLASSES[probs.argmax()]
